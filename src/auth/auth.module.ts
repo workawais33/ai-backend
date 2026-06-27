@@ -10,21 +10,25 @@ import { ConfigModule } from '@nestjs/config';
 
 @Module({
   imports: [
-  ConfigModule.forRoot({
-    isGlobal: true,
-  }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+    }),
 
-  JwtModule.register({
-    secret: process.env.JWT_SECRET,
-    signOptions: {
-      expiresIn: '7d',
-    },
-  }),
-],
+    JwtModule.register({
+      secret: process.env.JWT_SECRET,
+      signOptions: {
+        expiresIn: '7d',
+      },
+    }),
+
+    PrismaModule, // ✅ ADD THIS
+  ],
+
   providers: [
     AuthService,
     JwtStrategy,
   ],
+
   controllers: [AuthController],
 })
 export class AuthModule {}
