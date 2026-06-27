@@ -4,8 +4,11 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
- app.enableCors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+app.enableCors({
+  origin: [
+    'http://localhost:3000',
+    'https://ai-frontend-smoky.vercel.app',
+  ],
   credentials: true,
 });
 
