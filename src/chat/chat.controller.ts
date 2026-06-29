@@ -1,47 +1,61 @@
+import { randomUUID } from 'crypto';
 import {
   Body,
   Controller,
   Post,
+  Get,
   Res,
-  UseGuards,
   Req,
+  UseGuards,
 } from '@nestjs/common';
-
 import type { Response } from 'express';
+
 import { ChatService } from './chat.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { SendMessageDto } from './dto/send-message.dto';
 
 @Controller('chat')
 export class ChatController {
   constructor(private readonly chatService: ChatService) {}
 
-  
-  @Post()
-  async chat(
-    @Body() body: { message: string },
+  // =========================
+  // SINGLE CHAT ENDPOINT (CLEAN)
+  // =========================
+  @Post('send')
+  async sendMessage(
+    @Body() body: SendMessageDto,
+    @Req() req: any,
     @Res() res: Response,
   ) {
+    let guestId = req.cookies?.guestId;
 
-    await this.chatService.sendMessage(
-      null,
+    if (!guestId) {
+      guestId = randomUUID();
+
+      res.cookie('guestId', guestId, {
+        httpOnly: true,
+        maxAge: 1000 * 60 * 60 * 24 * 30,
+      });
+    }
+
+    const userId = req.user?.userId ?? null;
+
+    return this.chatService.sendMessage(
+      userId,
       body.message,
+      body.conversationId ?? null,
       res,
     );
   }
 
-  @Post('send')
+  // =========================
+  // CONVERSATIONS (FIXED AUTH)
+  // =========================
+  @Get('conversations')
   @UseGuards(JwtAuthGuard)
-  async sendMessage(
-    @Req() req,
-    @Body() body: { message: string },
-    @Res() res: Response,
-  ) {
-    const user = req.user as any;
+  async getConversations(@Req() req: any) {
+    const userId = req.user?.userId;
 
-    await this.chatService.sendMessage(
-      user.userId,
-      body.message,
-      res,
-    );
+    return this.chatService.getConversations(userId);
   }
 }
