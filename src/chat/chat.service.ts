@@ -8,11 +8,17 @@ export class ChatService {
   constructor(private prisma: PrismaService) {}
 
   // =========================
-  // GET CONVERSATIONS
+  // GET CONVERSATIONS (ONLY USERS)
   // =========================
-  async getConversations(userId: number) {
+  async getConversations(userId: number | null, guestId?: string | null) {
+    if (!userId && !guestId) return [];
+
+    const where = userId
+      ? { userId }
+      : { guestId };
+
     return this.prisma.conversation.findMany({
-      where: { userId },
+      where,
       include: {
         messages: {
           orderBy: { createdAt: 'asc' },
@@ -25,6 +31,76 @@ export class ChatService {
   }
 
   // =========================
+  // GET SINGLE CONVERSATION WITH MESSAGES
+  // =========================
+  async getConversationById(
+    conversationId: number,
+    userId: number | null,
+    guestId?: string | null,
+  ) {
+    const where: any = { id: conversationId };
+
+    if (userId) {
+      where.userId = userId;
+    } else if (guestId) {
+      where.guestId = guestId;
+    }
+
+    return this.prisma.conversation.findFirst({
+      where,
+      include: {
+        messages: {
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+  }
+
+  // =========================
+  // UPDATE CONVERSATION TITLE
+  // =========================
+  async updateConversationTitle(
+    conversationId: number,
+    title: string,
+    userId: number | null,
+    guestId?: string | null,
+  ) {
+    const where: any = { id: conversationId };
+
+    if (userId) {
+      where.userId = userId;
+    } else if (guestId) {
+      where.guestId = guestId;
+    }
+
+    return this.prisma.conversation.update({
+      where: { id: conversationId },
+      data: { title },
+    });
+  }
+
+  // =========================
+  // DELETE CONVERSATION
+  // =========================
+  async deleteConversation(
+    conversationId: number,
+    userId: number | null,
+    guestId?: string | null,
+  ) {
+    const where: any = { id: conversationId };
+
+    if (userId) {
+      where.userId = userId;
+    } else if (guestId) {
+      where.guestId = guestId;
+    }
+
+    return this.prisma.conversation.delete({
+      where: { id: conversationId },
+    });
+  }
+
+  // =========================
   // MAIN CHAT HANDLER
   // =========================
   async sendMessage(
@@ -32,37 +108,42 @@ export class ChatService {
     message: string,
     conversationId: number | null,
     res: Response,
+    guestId?: string | null,
   ) {
     try {
-      let conversation;
+      let conversation: { id: number } | null = null;
 
-      // =========================
-      // 1. FIND EXISTING CONVERSATION
-      // =========================
+      // =================================================
+      // 🧠 CASE 1: GUEST USER → SAVE TO DB WITH guestId
+      // =================================================
       if (conversationId) {
+        const conversationWhere: any = {
+          id: conversationId,
+        };
+
+        if (userId) {
+          conversationWhere.userId = userId;
+        } else if (guestId) {
+          conversationWhere.guestId = guestId;
+        }
+
         conversation = await this.prisma.conversation.findFirst({
-          where: {
-            id: conversationId,
-            userId: userId ?? undefined, // security check
-          },
+          where: conversationWhere,
         });
       }
 
-      // =========================
-      // 2. CREATE IF NOT FOUND
-      // =========================
+      // create new conversation if not found
       if (!conversation) {
         conversation = await this.prisma.conversation.create({
           data: {
             title: message.slice(0, 30),
-            userId: userId ?? null,
+            ...(userId ? { userId } : {}),
+            ...(guestId ? { guestId } : {}),
           },
         });
       }
 
-      // =========================
-      // 3. SAVE USER MESSAGE
-      // =========================
+      // save user message
       await this.prisma.message.create({
         data: {
           conversationId: conversation.id,
@@ -71,16 +152,24 @@ export class ChatService {
         },
       });
 
-      // =========================
-      // 4. CALL FASTAPI STREAM
-      // =========================
+      // call AI backend with conversation history
       const FASTAPI_URL = process.env.FASTAPI_URL;
+
+      // Get all messages from this conversation to send as history
+      const conversationMessages = await this.prisma.message.findMany({
+        where: { conversationId: conversation.id },
+        orderBy: { createdAt: 'asc' },
+      });
 
       const response = await axios.post(
         `${FASTAPI_URL}/chat`,
         {
           message,
           conversationId: conversation.id,
+          history: conversationMessages.map((msg) => ({
+            role: msg.role,
+            text: msg.text,
+          })),
         },
         { responseType: 'stream' },
       );
@@ -89,18 +178,12 @@ export class ChatService {
 
       let botReply = '';
 
-      // =========================
-      // 5. STREAM RESPONSE
-      // =========================
       response.data.on('data', (chunk: Buffer) => {
         const text = chunk.toString();
         botReply += text;
         res.write(text);
       });
 
-      // =========================
-      // 6. SAVE BOT MESSAGE
-      // =========================
       response.data.on('end', async () => {
         try {
           await this.prisma.message.create({
@@ -117,9 +200,6 @@ export class ChatService {
         res.end();
       });
 
-      // =========================
-      // 7. STREAM ERROR HANDLING
-      // =========================
       response.data.on('error', (err: any) => {
         console.error('Stream error:', err);
 
