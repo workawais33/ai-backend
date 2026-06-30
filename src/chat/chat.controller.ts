@@ -35,21 +35,37 @@ export class ChatController {
     return null;
   }
 
-  private getGuestId(req: any, body?: SendMessageDto | { guestId?: string }): string | null {
-    const fromBody = 'guestId' in body! ? body.guestId : undefined;
-    if (typeof fromBody === 'string' && fromBody.trim()) return fromBody.trim();
+ private getGuestId(
+  req: any,
+  body?: { guestId?: string },
+): string | null {
 
-    const fromReq = req?.user?.guestId ?? req?.guestId;
-    if (typeof fromReq === 'string' && fromReq.trim()) return fromReq.trim();
-
-    const headerValue = req?.headers?.['x-guest-id'];
-    if (typeof headerValue === 'string' && headerValue.trim()) return headerValue.trim();
-
-    const queryValue = req?.query?.guestId;
-    if (typeof queryValue === 'string' && queryValue.trim()) return queryValue.trim();
-
-    return null;
+  if (body?.guestId?.trim()) {
+    return body.guestId.trim();
   }
+
+  if (req?.user?.guestId) {
+    return req.user.guestId;
+  }
+
+  if (req?.guestId) {
+    return req.guestId;
+  }
+
+  const header = req?.headers?.['x-guest-id'];
+
+  if (typeof header === 'string' && header.trim()) {
+    return header.trim();
+  }
+
+  const query = req?.query?.guestId;
+
+  if (typeof query === 'string' && query.trim()) {
+    return query.trim();
+  }
+
+  return null;
+}
 
   // =========================
   // SEND MESSAGE (LOGIN OPTIONAL)
@@ -75,15 +91,21 @@ export class ChatController {
   // =========================
   // CONVERSATIONS (LOGIN ONLY)
   // =========================
-  @Get('conversations')
-  async getConversations(@Req() req: any) {
-    const userId = this.getUserId(req);
-    const guestId = this.getGuestId(req);
+ @Get('conversations')
+async getConversations(@Req() req:any){
 
-    if (!userId && !guestId) return [];
+   const userId = this.getUserId(req);
+   const guestId = this.getGuestId(req);
 
-    return this.chatService.getConversations(userId, guestId);
-  }
+   console.log("USER",userId);
+   console.log("GUEST",guestId);
+
+   return this.chatService.getConversations(
+      userId,
+      guestId
+   );
+
+}
 
   // =========================
   // GET SINGLE CONVERSATION WITH MESSAGES
@@ -125,6 +147,7 @@ export class ChatController {
     );
   }
 
+  
   // =========================
   // DELETE CONVERSATION
   // =========================

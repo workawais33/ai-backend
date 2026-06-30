@@ -12,21 +12,23 @@ export class ChatService {
   // =========================
   // GET CONVERSATIONS
   // =========================
-  async getConversations(userId: number | null, guestId?: string | null) {
-    if (!userId && !guestId) return [];
+  async getConversations(userId:number|null, guestId?:string|null){
 
-    const where = userId ? { userId } : { guestId };
+   console.log(userId);
+   console.log(guestId);
 
-    return this.prisma.conversation.findMany({
+   const where = userId
+      ? { userId }
+      : { guestId };
+
+   return this.prisma.conversation.findMany({
       where,
-      include: {
-        messages: {
-          orderBy: { createdAt: 'asc' },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-  }
+      include:{
+         messages:true
+      }
+   });
+
+}
 
   // =========================
   // GET SINGLE CONVERSATION
@@ -70,6 +72,8 @@ export class ChatService {
       data: { title },
     });
   }
+
+  
 
   // =========================
   // DELETE CONVERSATION
